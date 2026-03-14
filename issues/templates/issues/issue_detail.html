@@ -1,0 +1,51 @@
+{% extends "issues/base.html" %}
+
+{% block title %}Issue {{ issue_key }} – Jira-Flection{% endblock %}
+{% block page_title %}Issue Details{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 800px; margin: 0 auto; margin-top: 1rem;">
+    {% if error %}
+        <div class="alert alert-error">⚠️ {{ error }}</div>
+        <div class="mt-2 text-center">
+            <a href="{% url 'projects' %}" class="btn btn-outline" style="text-decoration: none;">← Back to Projects</a>
+        </div>
+    {% elif issue %}
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <span class="issue-key" style="font-size: 1.25rem; font-weight: 700;">{{ issue.key }}</span>
+                    <span class="badge badge-status" style="font-size: 0.75rem;">{{ issue.status }}</span>
+                    <span class="badge badge-type" style="font-size: 0.75rem;">{{ issue.issue_type }}</span>
+                    {% if issue.priority %}
+                        <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--warning); border-radius: 20px; padding: .2rem .6rem; font-size: .7rem; font-weight: 600;">{{ issue.priority }}</span>
+                    {% endif %}
+                </div>
+                <h3 style="font-size: 1.15rem; color: var(--text-primary); margin: 0; line-height: 1.4;">
+                    {{ issue.summary }}
+                </h3>
+            </div>
+            {% if issue.link %}
+            <a href="{{ issue.link }}" target="_blank" class="btn btn-primary" style="text-decoration: none;">
+                ↗️ Open in Jira
+            </a>
+            {% endif %}
+        </div>
+        
+        <div style="background: rgba(0,0,0,0.15); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px;">
+            <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Description</h4>
+            <div style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: var(--text-primary);">
+                {% if issue.description %}
+                    {{ issue.description }}
+                {% else %}
+                    <em class="text-muted">No description provided.</em>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mt-2 text-center">
+            <button onclick="window.history.back()" class="btn btn-outline" style="text-decoration: none; border: none;">← Go Back</button>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

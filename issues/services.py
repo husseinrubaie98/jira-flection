@@ -77,6 +77,28 @@ class JiraService:
         except Exception as e:
             raise JiraAPIError(f'Unexpected error: {str(e)}')
 
+    def _extract_adf_text(self, node):
+        """Extract plain text from Atlassian Document Format (ADF) JSON."""
+        if not node:
+            return ""
+        if isinstance(node, str):
+            return node
+        if isinstance(node, list):
+            return ' '.join(self._extract_adf_text(child) for child in node)
+        if isinstance(node, dict):
+            if node.get('type') == 'text' and 'text' in node:
+                return node['text']
+            
+            content = ""
+            if 'content' in node:
+                content = self._extract_adf_text(node['content'])
+            
+            # Add newline for block elements
+            if node.get('type') in ['paragraph', 'heading', 'listItem', 'codeBlock'] and content:
+                content += "\n"
+            return content
+        return ""
+
     def get_projects(self):
         """Fetch all accessible projects from JIRA using v3 project search."""
         all_projects = []
@@ -104,39 +126,37 @@ class JiraService:
 
         return sorted(all_projects, key=lambda x: x['name'])
 
-    def get_issues(self, project_key):
-        """Fetch all issues for a given project using v3 search."""
-        all_issues = []
-        next_page_token = None
+    def get_issues(self, project_key, next_page_token=None):
+        """Fetch a page of issues for a given project using v3 search."""
+        params = {
+            'jql': f'project="{project_key}"',
+            'fields': 'summary,description,issuetype,status,priority',
+            'maxResults': 50
+        }
+        if next_page_token:
+            params['nextPageToken'] = next_page_token
 
-        while True:
-            params = {
-                'jql': f'project="{project_key}"',
-                'fields': 'summary,description,issuetype,status,priority',
-                'maxResults': 50
-            }
-            if next_page_token:
-                params['nextPageToken'] = next_page_token
+        data = self._make_request('search/jql', params=params)
 
-            data = self._make_request('search/jql', params=params)
+        issues = []
+        for issue in data.get('issues', []):
+            fields = issue.get('fields', {})
+            description = fields.get('description', '')
+            if isinstance(description, dict):
+                description = self._extract_adf_text(description)
+            issues.append({
+                'key': issue.get('key', ''),
+                'summary': fields.get('summary', ''),
+                'description': description or '',
+                'issue_type': fields.get('issuetype', {}).get('name', ''),
+                'status': fields.get('status', {}).get('name', ''),
+                'priority': fields.get('priority', {}).get('name', '') if fields.get('priority') else '',
+            })
 
-            issues = data.get('issues', [])
-            for issue in issues:
-                fields = issue.get('fields', {})
-                all_issues.append({
-                    'key': issue.get('key', ''),
-                    'summary': fields.get('summary', ''),
-                    'description': fields.get('description', '') or '',
-                    'issue_type': fields.get('issuetype', {}).get('name', ''),
-                    'status': fields.get('status', {}).get('name', ''),
-                    'priority': fields.get('priority', {}).get('name', '') if fields.get('priority') else '',
-                })
-
-            next_page_token = data.get('nextPageToken')
-            if not next_page_token:
-                break
-
-        return all_issues
+        return {
+            'issues': issues,
+            'nextPageToken': data.get('nextPageToken')
+        }
 
     def get_subtasks(self, issue_key):
         """Fetch subtasks for a given issue using v3 search."""
@@ -149,13 +169,34 @@ class JiraService:
         subtasks = []
         for issue in data.get('issues', []):
             fields = issue.get('fields', {})
+            description = fields.get('description', '')
+            if isinstance(description, dict):
+                description = self._extract_adf_text(description)
             subtasks.append({
                 'key': issue.get('key', ''),
                 'summary': fields.get('summary', ''),
-                'description': fields.get('description', '') or '',
+                'description': description or '',
                 'issue_type': fields.get('issuetype', {}).get('name', ''),
                 'status': fields.get('status', {}).get('name', ''),
                 'priority': fields.get('priority', {}).get('name', '') if fields.get('priority') else '',
             })
 
         return subtasks
+
+    def get_issue(self, issue_key):
+        """Fetch a single issue by key using v3 API."""
+        data = self._make_request(f'issue/{issue_key}')
+        fields = data.get('fields', {})
+        description = fields.get('description', '')
+        if isinstance(description, dict):
+            description = self._extract_adf_text(description)
+        return {
+            'key': data.get('key', ''),
+            'id': data.get('id', ''),
+            'summary': fields.get('summary', ''),
+            'description': description or '',
+            'issue_type': fields.get('issuetype', {}).get('name', ''),
+            'status': fields.get('status', {}).get('name', ''),
+            'priority': fields.get('priority', {}).get('name', '') if fields.get('priority') else '',
+            'link': f"{self.base_url}/browse/{data.get('key', '')}"
+        }

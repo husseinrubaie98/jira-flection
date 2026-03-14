@@ -9,10 +9,21 @@
     <div class="empty-state">
         <div class="icon">🔍</div>
         <h3>Ready to load issues</h3>
-        <p class="mb-2">Click the button below to fetch all issues for <strong>{{ project_key }}</strong>.</p>
-        <button class="btn btn-primary" id="btn-load-issues" onclick="loadIssues()">
-            ⬇️ Load Issues
-        </button>
+        <p class="mb-2">Fetch issues for project <strong>{{ project_key }}</strong> or search for a specific issue below.</p>
+        
+        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="btn-load-issues" onclick="loadIssues()">
+                ⬇️ Load Issues (Paged)
+            </button>
+            <button class="btn btn-outline" id="btn-load-all-issues" onclick="loadAllIssues()">
+                ⬇️ Load All Issues
+            </button>
+            <div style="width: 1px; height: 30px; background: var(--border); margin: 0 5px;"></div>
+            <form id="search-single-form" style="display: flex; gap: 5px;" onsubmit="searchSingleIssue(event)">
+                <input type="text" id="input-search-issue" class="form-control" placeholder="Issue Key (e.g. DP-1)" style="width: 180px; padding: 0.4rem 0.8rem; margin: 0;" required>
+                <button type="submit" class="btn btn-outline" id="btn-search-issue" style="padding: 0.4rem 0.8rem;">Search</button>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -20,82 +31,317 @@
 {% block extra_js %}
 <script>
     const PROJECT_KEY = "{{ project_key }}";
+    let nextPageToken = null;
+    let isLoading = false;
+    let totalIssuesLoaded = 0;
+    
+    // Track loaded issues to prevent duplicates
+    const loadedIssuesSet = new Set();
+    // Flag to track if the table has been initialized
+    let isTableInitialized = false;
 
-    async function loadIssues() {
+    async function loadIssues(isNextPage = false) {
+        if (isLoading) return;
+        isLoading = true;
+
         const area = document.getElementById('issues-area');
-        const btn = document.getElementById('btn-load-issues');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Loading…';
+        
+        if (!isNextPage) {
+            const btn = document.getElementById('btn-load-issues');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Loading…';
+            }
+        } else {
+            const loadMoreBtn = document.getElementById('btn-load-more');
+            if (loadMoreBtn) {
+                loadMoreBtn.disabled = true;
+                loadMoreBtn.innerHTML = '<span class="spinner"></span> Loading…';
+            }
+        }
 
         try {
-            const res = await fetch(`/api/issues/${PROJECT_KEY}/`);
+            let url = `/api/issues/${PROJECT_KEY}/`;
+            if (isNextPage && nextPageToken) {
+                url += `?nextPageToken=${encodeURIComponent(nextPageToken)}`;
+            }
+            const res = await fetch(url);
             const data = await res.json();
 
             if (!data.success) {
-                area.innerHTML = `<div class="alert alert-error">⚠️ ${data.error}</div>`;
+                if (!isNextPage) {
+                    area.innerHTML = `<div class="alert alert-error">⚠️ ${data.error}</div>`;
+                } else {
+                    alert('Error loading issues: ' + data.error);
+                }
+                isLoading = false;
+                nextPageToken = null;
                 return;
             }
 
-            if (data.issues.length === 0) {
+            if (!isNextPage && data.issues.length === 0) {
                 area.innerHTML = `
                     <div class="empty-state">
                         <div class="icon">📭</div>
                         <h3>No issues found</h3>
                         <p>This project has no issues yet.</p>
                     </div>`;
+                isLoading = false;
                 return;
             }
 
             let rows = '';
+            let newlyAddedCount = 0;
             data.issues.forEach(issue => {
-                rows += `
-                    <tr>
-                        <td><span class="issue-key">${esc(issue.key)}</span></td>
-                        <td class="issue-summary">${esc(issue.summary)}</td>
-                        <td><span class="badge badge-status">${esc(issue.status)}</span></td>
-                        <td>
-                            <button class="btn btn-outline btn-sm"
-                                    onclick="loadSubtasks('${issue.key}', this)"
-                                    data-loaded="false">
-                                📎 Load Subtasks
-                            </button>
-                            <div class="subtask-container" id="subtasks-${issue.key}"></div>
-                        </td>
-                    </tr>`;
+                if (!loadedIssuesSet.has(issue.key)) {
+                    loadedIssuesSet.add(issue.key);
+                    newlyAddedCount++;
+                    rows += `
+                        <tr id="row-${issue.key}">
+                            <td><span class="issue-key">${esc(issue.key)}</span></td>
+                            <td class="issue-summary" title="${esc(issue.description).replace(/"/g, '&quot;')}">${esc(issue.summary)}</td>
+                            <td><span class="badge badge-status">${esc(issue.status)}</span></td>
+                            <td>
+                                <button class="btn btn-outline btn-sm"
+                                        onclick="loadSubtasks('${issue.key}', this)"
+                                        data-loaded="false">
+                                    📎 Load Subtasks
+                                </button>
+                            </td>
+                        </tr>
+                        <tr id="subtasks-row-${issue.key}" class="subtasks-container-row" style="display: none;">
+                            <td colspan="4" style="padding: 0; border-bottom: none;">
+                                <div class="subtask-container" id="subtasks-${issue.key}" style="padding: 10px; background: rgba(0,0,0,0.02);"></div>
+                            </td>
+                        </tr>`;
+                }
             });
 
-            area.innerHTML = `
-                <div class="card" style="padding:0;overflow:hidden;">
-                    <table class="issues-table">
-                        <thead>
-                            <tr>
-                                <th style="width:120px;">ID</th>
-                                <th>Title</th>
-                                <th style="width:110px;">Status</th>
-                                <th style="width:200px;">Subtasks</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>
-                <p class="text-muted mt-2" style="font-size:.82rem;">
-                    Showing ${data.issues.length} issue${data.issues.length !== 1 ? 's' : ''}
-                </p>`;
+            totalIssuesLoaded += newlyAddedCount;
+
+            if (!isTableInitialized) {
+                // Initial load
+                area.innerHTML = getSearchHeaderHTML() + `
+                    <div class="card" style="padding:0;overflow:hidden;margin-top:20px;">
+                        <table class="issues-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:120px;">ID</th>
+                                    <th>Title</th>
+                                    <th style="width:110px;">Status</th>
+                                    <th style="width:200px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="issues-tbody">${rows}</tbody>
+                        </table>
+                    </div>
+                    <div id="footer-area" class="mt-3 text-center">
+                        <p class="text-muted" id="issues-count" style="font-size:.85rem; margin-bottom: 0.5rem;">
+                            Showing ${totalIssuesLoaded} issue${totalIssuesLoaded !== 1 ? 's' : ''}
+                        </p>
+                        ${nextPageToken ? `<button id="btn-load-more" class="btn btn-outline" onclick="loadIssues(true)">Load More</button>` : ''}
+                    </div>`;
+                isTableInitialized = true;
+            } else {
+                // Load more appending
+                const tbody = document.getElementById('issues-tbody');
+                if (tbody && rows) {
+                    tbody.insertAdjacentHTML('beforeend', rows);
+                }
+                
+                const countElem = document.getElementById('issues-count');
+                if (countElem) {
+                    countElem.textContent = `Showing ${totalIssuesLoaded} issue${totalIssuesLoaded !== 1 ? 's' : ''}`;
+                }
+                
+                const footerArea = document.getElementById('footer-area');
+                if (footerArea) {
+                    const existingBtn = document.getElementById('btn-load-more');
+                    if (existingBtn) existingBtn.remove();
+                    
+                    if (nextPageToken) {
+                        footerArea.insertAdjacentHTML('beforeend', `<button id="btn-load-more" class="btn btn-outline" onclick="loadIssues(true)">Load More</button>`);
+                    }
+                }
+            }
         } catch (err) {
-            area.innerHTML = `<div class="alert alert-error">⚠️ Failed to load issues: ${err.message}</div>`;
+            if (!isNextPage) {
+                area.innerHTML = `<div class="alert alert-error">⚠️ Failed to load issues: ${err.message}</div>`;
+            } else {
+                alert('Failed to load issues: ' + err.message);
+            }
+            nextPageToken = null;
+        }
+        isLoading = false;
+    }
+
+    async function loadAllIssues() {
+        const btnAll = document.getElementById('btn-load-all-issues');
+        if (btnAll) {
+            btnAll.disabled = true;
+            btnAll.innerHTML = '<span class="spinner"></span> Loading All…';
+        }
+        const btn = document.getElementById('btn-load-issues');
+        if (btn) btn.disabled = true;
+
+        await loadIssues(false);
+        while (nextPageToken) {
+            await loadIssues(true);
         }
     }
 
+    async function searchSingleIssue(e) {
+        e.preventDefault();
+        const issueKeyInput = document.getElementById('input-search-issue');
+        const issueKey = issueKeyInput.value.trim();
+        if (!issueKey) return;
+        
+        // Prevent re-fetching if already loaded
+        if (loadedIssuesSet.has(issueKey)) {
+            // Briefly highlight the row or simply alert if we want
+            const row = document.getElementById(`row-${issueKey}`);
+            if (row) {
+                row.style.backgroundColor = 'var(--accent-glow)';
+                setTimeout(() => {
+                    row.style.backgroundColor = '';
+                }, 2000);
+                issueKeyInput.value = ''; // clear input
+            }
+            return;
+        }
+
+        if (isLoading) return;
+        isLoading = true;
+
+        const btnSearch = document.getElementById('btn-search-issue');
+        const originalText = btnSearch.innerText;
+        btnSearch.disabled = true;
+        btnSearch.innerHTML = '<span class="spinner"></span>';
+
+        // Note: we DO NOT clear states or nextPageToken here anymore, as we append.
+        const area = document.getElementById('issues-area');
+
+        try {
+            const res = await fetch(`/api/issue/search/?issue_key=${encodeURIComponent(issueKey)}`);
+            const data = await res.json();
+
+            if (!data.success) {
+                alert(`⚠️ Error: ${data.error}`);
+                btnSearch.innerHTML = originalText;
+                btnSearch.disabled = false;
+                isLoading = false;
+                return;
+            }
+
+            if (data.issues.length === 0) {
+                alert(`No issue matched exactly "${esc(issueKey)}".`);
+                btnSearch.innerHTML = originalText;
+                btnSearch.disabled = false;
+                isLoading = false;
+                return;
+            }
+
+            let issue = data.issues[0];
+            loadedIssuesSet.add(issue.key);
+            totalIssuesLoaded += 1;
+            
+            let row = `
+                <tr id="row-${issue.key}" style="background-color: var(--accent-glow); transition: background-color 2s;">
+                    <td><span class="issue-key">${esc(issue.key)}</span></td>
+                    <td class="issue-summary" title="${esc(issue.description).replace(/"/g, '&quot;')}">${esc(issue.summary)}</td>
+                    <td><span class="badge badge-status">${esc(issue.status)}</span></td>
+                    <td>
+                        <button class="btn btn-outline btn-sm"
+                                onclick="loadSubtasks('${issue.key}', this)"
+                                data-loaded="false">
+                            📎 Load Subtasks
+                        </button>
+                    </td>
+                </tr>
+                <tr id="subtasks-row-${issue.key}" class="subtasks-container-row" style="display: none;">
+                    <td colspan="4" style="padding: 0; border-bottom: none;">
+                        <div class="subtask-container" id="subtasks-${issue.key}" style="padding: 10px; background: rgba(0,0,0,0.02);"></div>
+                    </td>
+                </tr>`;
+
+            if (!isTableInitialized) {
+                area.innerHTML = getSearchHeaderHTML() + `
+                    <div class="card" style="padding:0;overflow:hidden;margin-top:20px;">
+                        <table class="issues-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:120px;">ID</th>
+                                    <th>Title</th>
+                                    <th style="width:110px;">Status</th>
+                                    <th style="width:200px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="issues-tbody">${row}</tbody>
+                        </table>
+                    </div>
+                    <div id="footer-area" class="mt-3 text-center">
+                        <p class="text-muted" id="issues-count" style="font-size:.85rem; margin-bottom: 0.5rem;">
+                            Showing ${totalIssuesLoaded} search result${totalIssuesLoaded !== 1 ? 's' : ''}
+                        </p>
+                    </div>`;
+                isTableInitialized = true;
+            } else {
+                // Table already exists, prepend or append (we'll prepend to the top of tbody to make it visible)
+                const tbody = document.getElementById('issues-tbody');
+                if (tbody) {
+                    tbody.insertAdjacentHTML('afterbegin', row);
+                }
+                const countElem = document.getElementById('issues-count');
+                if (countElem) {
+                    countElem.textContent = `Showing ${totalIssuesLoaded} result${totalIssuesLoaded !== 1 ? 's' : ''}`;
+                }
+            }
+            
+            // clear the input box and fade out the highlight
+            issueKeyInput.value = '';
+            setTimeout(() => {
+                const addedRow = document.getElementById(`row-${issue.key}`);
+                if (addedRow) addedRow.style.backgroundColor = '';
+            }, 500);
+            
+        } catch (err) {
+            alert(`⚠️ Failed to load issue: ${err.message}`);
+        }
+        
+        btnSearch.innerHTML = originalText;
+        btnSearch.disabled = false;
+        isLoading = false;
+    }
+
+    function getSearchHeaderHTML() {
+        return `
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 15px;">
+                <button class="btn btn-primary" id="btn-load-issues" onclick="loadIssues()">
+                    ⬇️ Load Issues (Paged)
+                </button>
+                <button class="btn btn-outline" id="btn-load-all-issues" onclick="loadAllIssues()">
+                    ⬇️ Load All Issues
+                </button>
+                <div style="width: 1px; height: 30px; background: var(--border); margin: 0 5px;"></div>
+                <form id="search-single-form" style="display: flex; gap: 5px;" onsubmit="searchSingleIssue(event)">
+                    <input type="text" id="input-search-issue" class="form-control" placeholder="Issue Key (e.g. DP-1)" style="width: 180px; padding: 0.4rem 0.8rem; margin: 0;" required>
+                    <button type="submit" class="btn btn-outline" id="btn-search-issue" style="padding: 0.4rem 0.8rem;">Search</button>
+                </form>
+            </div>`;
+    }
+
     async function loadSubtasks(issueKey, btn) {
+        const subtasksRow = document.getElementById(`subtasks-row-${issueKey}`);
+        
         if (btn.dataset.loaded === 'true') {
-            const container = document.getElementById(`subtasks-${issueKey}`);
-            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+            subtasksRow.style.display = subtasksRow.style.display === 'none' ? 'table-row' : 'none';
             return;
         }
 
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> Loading…';
         const container = document.getElementById(`subtasks-${issueKey}`);
+        subtasksRow.style.display = 'table-row';
 
         try {
             const res = await fetch(`/api/subtasks/${issueKey}/`);
@@ -109,7 +355,7 @@
             }
 
             if (data.subtasks.length === 0) {
-                container.innerHTML = `<p class="text-muted mt-1" style="font-size:.82rem;padding:.5rem 0;">No subtasks.</p>`;
+                container.innerHTML = `<p class="text-muted" style="font-size:.85rem; margin: 0; padding: 10px;">No subtasks found.</p>`;
                 btn.textContent = '📎 No Subtasks';
                 btn.disabled = true;
                 return;
@@ -118,17 +364,17 @@
             let html = '';
             data.subtasks.forEach((st, i) => {
                 html += `
-                    <div class="accordion-item">
-                        <div class="accordion-header" onclick="toggleAccordion(this)">
-                            <div class="left">
-                                <span class="issue-key" style="font-size:.8rem;">${esc(st.key)}</span>
-                                <span style="font-size:.85rem;">${esc(st.summary)}</span>
-                                <span class="badge badge-status" style="font-size:.65rem;">${esc(st.status)}</span>
+                    <div class="accordion-item" style="border: 1px solid var(--border-color, #dee2e6); margin-bottom: 5px; border-radius: 4px; background: #fff;">
+                        <div class="accordion-header" onclick="toggleAccordion(this)" style="padding: 10px 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 4px;">
+                            <div class="left" style="display: flex; align-items: center; gap: 10px;">
+                                <span class="issue-key" style="font-size:.8rem; font-weight: 600;">${esc(st.key)}</span>
+                                <span style="font-size:.9rem;">${esc(st.summary)}</span>
+                                <span class="badge badge-status" style="font-size:.7rem;">${esc(st.status)}</span>
                             </div>
-                            <span class="chevron">▶</span>
+                            <span class="chevron" style="transition: transform 0.2s; font-size: 0.8rem; color: #666;">▶</span>
                         </div>
-                        <div class="accordion-body">
-                            <div class="accordion-body-inner">${st.description ? esc(st.description) : '<em class="text-muted">No description.</em>'}</div>
+                        <div class="accordion-body" style="display: none; padding: 15px; border-top: 1px solid var(--border-color, #dee2e6); background: #fdfdfd;">
+                            <div class="accordion-body-inner" style="font-size: 0.9rem; white-space: pre-wrap;">${st.description ? esc(st.description) : '<em class="text-muted">No description provided.</em>'}</div>
                         </div>
                     </div>`;
             });
@@ -147,12 +393,20 @@
     function toggleAccordion(header) {
         header.classList.toggle('open');
         const body = header.nextElementSibling;
-        body.classList.toggle('open');
+        const chevron = header.querySelector('.chevron');
+        if (header.classList.contains('open')) {
+            body.style.display = 'block';
+            chevron.style.transform = 'rotate(90deg)';
+        } else {
+            body.style.display = 'none';
+            chevron.style.transform = 'rotate(0deg)';
+        }
     }
 
     function esc(str) {
+        if (!str) return '';
         const div = document.createElement('div');
-        div.textContent = str;
+        div.textContent = typeof str === 'string' ? str : JSON.stringify(str);
         return div.innerHTML;
     }
 </script>

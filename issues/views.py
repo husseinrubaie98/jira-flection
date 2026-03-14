@@ -39,9 +39,14 @@ def project_detail(request, project_key):
 def api_load_issues(request, project_key):
     """API endpoint: load issues for a project (called via AJAX)."""
     jira = JiraService()
+    next_page_token = request.GET.get('nextPageToken')
     try:
-        issue_list = jira.get_issues(project_key)
-        return JsonResponse({'success': True, 'issues': issue_list})
+        data = jira.get_issues(project_key, next_page_token)
+        return JsonResponse({
+            'success': True, 
+            'issues': data['issues'], 
+            'nextPageToken': data['nextPageToken']
+        })
     except JiraAPIError as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
@@ -77,3 +82,48 @@ def settings_view(request):
         'jira_api_token': JiraSetting.get('jira_api_token', ''),
     }
     return render(request, 'issues/settings.html', context)
+
+def api_search_issue(request):
+    """API endpoint: search for a single issue and return it in the issues array format."""
+    jira = JiraService()
+    issue_key = request.GET.get('issue_key', '').strip()
+    
+    if not issue_key:
+        return JsonResponse({'success': False, 'error': 'No issue key provided'}, status=400)
+
+    try:
+        issue = jira.get_issue(issue_key)
+        # Wrap the single issue in a list to match the UI's table expectation
+        return JsonResponse({'success': True, 'issues': [issue], 'nextPageToken': None})
+    except JiraAPIError as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+def issue_search(request):
+    """Search for an issue by key from a form submission."""
+    issue_key = request.GET.get('issue_key', '').strip()
+    if not issue_key:
+        return redirect('projects')
+    return redirect('issue_detail_view', issue_key=issue_key)
+
+def issue_detail_view(request, issue_key):
+    """View details of a single issue."""
+    jira = JiraService()
+    issue = None
+    error = None
+
+    if jira._is_configured():
+        try:
+            issue = jira.get_issue(issue_key)
+        except JiraAPIError as e:
+            error = str(e)
+    else:
+        error = (
+            'JIRA is not configured yet. Please go to '
+            '<a href="/settings/">Settings</a> to set up your connection.'
+        )
+
+    return render(request, 'issues/issue_detail.html', {
+        'issue_key': issue_key,
+        'issue': issue,
+        'error': error,
+    })
