@@ -1,0 +1,79 @@
+import json
+from django.shortcuts import render, redirect
+from django.http import JsonResponse
+from django.contrib import messages
+from .models import JiraSetting
+from .services import JiraService, JiraAPIError
+
+
+def projects(request):
+    """Home page - list all JIRA projects."""
+    jira = JiraService()
+    project_list = []
+    error = None
+
+    if jira._is_configured():
+        try:
+            project_list = jira.get_projects()
+        except JiraAPIError as e:
+            error = str(e)
+    else:
+        error = (
+            'JIRA is not configured yet. Please go to '
+            '<a href="/settings/">Settings</a> to set up your connection.'
+        )
+
+    return render(request, 'issues/projects.html', {
+        'projects': project_list,
+        'error': error,
+    })
+
+
+def project_detail(request, project_key):
+    """Project detail page with 'Load Issues' button."""
+    return render(request, 'issues/project_detail.html', {
+        'project_key': project_key,
+    })
+
+
+def api_load_issues(request, project_key):
+    """API endpoint: load issues for a project (called via AJAX)."""
+    jira = JiraService()
+    try:
+        issue_list = jira.get_issues(project_key)
+        return JsonResponse({'success': True, 'issues': issue_list})
+    except JiraAPIError as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+def api_load_subtasks(request, issue_key):
+    """API endpoint: load subtasks for an issue (called via AJAX)."""
+    jira = JiraService()
+    try:
+        subtask_list = jira.get_subtasks(issue_key)
+        return JsonResponse({'success': True, 'subtasks': subtask_list})
+    except JiraAPIError as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+def settings_view(request):
+    """Settings page to configure JIRA connection."""
+    if request.method == 'POST':
+        jira_url = request.POST.get('jira_url', '').strip()
+        jira_email = request.POST.get('jira_email', '').strip()
+        jira_api_token = request.POST.get('jira_api_token', '').strip()
+
+        JiraSetting.set('jira_url', jira_url)
+        JiraSetting.set('jira_email', jira_email)
+        if jira_api_token:
+            JiraSetting.set('jira_api_token', jira_api_token)
+
+        messages.success(request, 'Settings saved successfully!')
+        return redirect('settings')
+
+    context = {
+        'jira_url': JiraSetting.get('jira_url', ''),
+        'jira_email': JiraSetting.get('jira_email', ''),
+        'jira_api_token': JiraSetting.get('jira_api_token', ''),
+    }
+    return render(request, 'issues/settings.html', context)

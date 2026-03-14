@@ -1,0 +1,159 @@
+{% extends "issues/base.html" %}
+
+{% block title %}{{ project_key }} – Jira-Flection{% endblock %}
+{% block nav_projects %}active{% endblock %}
+{% block page_title %}Project: {{ project_key }}{% endblock %}
+
+{% block content %}
+<div id="issues-area">
+    <div class="empty-state">
+        <div class="icon">🔍</div>
+        <h3>Ready to load issues</h3>
+        <p class="mb-2">Click the button below to fetch all issues for <strong>{{ project_key }}</strong>.</p>
+        <button class="btn btn-primary" id="btn-load-issues" onclick="loadIssues()">
+            ⬇️ Load Issues
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const PROJECT_KEY = "{{ project_key }}";
+
+    async function loadIssues() {
+        const area = document.getElementById('issues-area');
+        const btn = document.getElementById('btn-load-issues');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Loading…';
+
+        try {
+            const res = await fetch(`/api/issues/${PROJECT_KEY}/`);
+            const data = await res.json();
+
+            if (!data.success) {
+                area.innerHTML = `<div class="alert alert-error">⚠️ ${data.error}</div>`;
+                return;
+            }
+
+            if (data.issues.length === 0) {
+                area.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📭</div>
+                        <h3>No issues found</h3>
+                        <p>This project has no issues yet.</p>
+                    </div>`;
+                return;
+            }
+
+            let rows = '';
+            data.issues.forEach(issue => {
+                rows += `
+                    <tr>
+                        <td><span class="issue-key">${esc(issue.key)}</span></td>
+                        <td class="issue-summary">${esc(issue.summary)}</td>
+                        <td><span class="badge badge-status">${esc(issue.status)}</span></td>
+                        <td>
+                            <button class="btn btn-outline btn-sm"
+                                    onclick="loadSubtasks('${issue.key}', this)"
+                                    data-loaded="false">
+                                📎 Load Subtasks
+                            </button>
+                            <div class="subtask-container" id="subtasks-${issue.key}"></div>
+                        </td>
+                    </tr>`;
+            });
+
+            area.innerHTML = `
+                <div class="card" style="padding:0;overflow:hidden;">
+                    <table class="issues-table">
+                        <thead>
+                            <tr>
+                                <th style="width:120px;">ID</th>
+                                <th>Title</th>
+                                <th style="width:110px;">Status</th>
+                                <th style="width:200px;">Subtasks</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <p class="text-muted mt-2" style="font-size:.82rem;">
+                    Showing ${data.issues.length} issue${data.issues.length !== 1 ? 's' : ''}
+                </p>`;
+        } catch (err) {
+            area.innerHTML = `<div class="alert alert-error">⚠️ Failed to load issues: ${err.message}</div>`;
+        }
+    }
+
+    async function loadSubtasks(issueKey, btn) {
+        if (btn.dataset.loaded === 'true') {
+            const container = document.getElementById(`subtasks-${issueKey}`);
+            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Loading…';
+        const container = document.getElementById(`subtasks-${issueKey}`);
+
+        try {
+            const res = await fetch(`/api/subtasks/${issueKey}/`);
+            const data = await res.json();
+
+            if (!data.success) {
+                container.innerHTML = `<div class="alert alert-error" style="margin-top:.5rem;">⚠️ ${data.error}</div>`;
+                btn.disabled = false;
+                btn.textContent = '📎 Load Subtasks';
+                return;
+            }
+
+            if (data.subtasks.length === 0) {
+                container.innerHTML = `<p class="text-muted mt-1" style="font-size:.82rem;padding:.5rem 0;">No subtasks.</p>`;
+                btn.textContent = '📎 No Subtasks';
+                btn.disabled = true;
+                return;
+            }
+
+            let html = '';
+            data.subtasks.forEach((st, i) => {
+                html += `
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="left">
+                                <span class="issue-key" style="font-size:.8rem;">${esc(st.key)}</span>
+                                <span style="font-size:.85rem;">${esc(st.summary)}</span>
+                                <span class="badge badge-status" style="font-size:.65rem;">${esc(st.status)}</span>
+                            </div>
+                            <span class="chevron">▶</span>
+                        </div>
+                        <div class="accordion-body">
+                            <div class="accordion-body-inner">${st.description ? esc(st.description) : '<em class="text-muted">No description.</em>'}</div>
+                        </div>
+                    </div>`;
+            });
+
+            container.innerHTML = html;
+            btn.textContent = `📎 ${data.subtasks.length} Subtask${data.subtasks.length !== 1 ? 's' : ''}`;
+            btn.dataset.loaded = 'true';
+            btn.disabled = false;
+        } catch (err) {
+            container.innerHTML = `<div class="alert alert-error" style="margin-top:.5rem;">⚠️ ${err.message}</div>`;
+            btn.disabled = false;
+            btn.textContent = '📎 Load Subtasks';
+        }
+    }
+
+    function toggleAccordion(header) {
+        header.classList.toggle('open');
+        const body = header.nextElementSibling;
+        body.classList.toggle('open');
+    }
+
+    function esc(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+</script>
+{% endblock %}
