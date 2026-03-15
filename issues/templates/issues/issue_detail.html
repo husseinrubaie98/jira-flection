@@ -1,51 +1,213 @@
 {% extends "issues/base.html" %}
 
 {% block title %}Issue {{ issue_key }} – Jira-Flection{% endblock %}
-{% block page_title %}Issue Details{% endblock %}
+{% block page_title %}Issue Details: {{ issue_key }}{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 800px; margin: 0 auto; margin-top: 1rem;">
+<div class="card" style="margin-top: 1rem;">
     {% if error %}
         <div class="alert alert-error">⚠️ {{ error }}</div>
         <div class="mt-2 text-center">
             <a href="{% url 'projects' %}" class="btn btn-outline" style="text-decoration: none;">← Back to Projects</a>
         </div>
     {% elif issue %}
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
-            <div>
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                    <span class="issue-key" style="font-size: 1.25rem; font-weight: 700;">{{ issue.key }}</span>
-                    <span class="badge badge-status" style="font-size: 0.75rem;">{{ issue.status }}</span>
-                    <span class="badge badge-type" style="font-size: 0.75rem;">{{ issue.issue_type }}</span>
-                    {% if issue.priority %}
-                        <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--warning); border-radius: 20px; padding: .2rem .6rem; font-size: .7rem; font-weight: 600;">{{ issue.priority }}</span>
+        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+            
+            <!-- LEFT COLUMN (Main Content) -->
+            <div style="flex: 1; min-width: 0; padding-right: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <span class="issue-icon" id="main-issue-icon" style="font-size: 1.25rem;">📄</span>
+                            <span class="issue-key" style="font-size: 1.25rem; font-weight: 700;">{{ issue.key }}</span>
+                            <span class="badge badge-status" style="font-size: 0.75rem;">{{ issue.status }}</span>
+                            <span class="badge badge-type" style="font-size: 0.75rem;">{{ issue.issue_type }}</span>
+                            {% if issue.priority %}
+                                <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--warning); border-radius: 20px; padding: .2rem .6rem; font-size: .7rem; font-weight: 600;">{{ issue.priority }}</span>
+                            {% endif %}
+                        </div>
+                        <h3 style="font-size: 1.15rem; color: var(--text-primary); margin: 0; line-height: 1.4;">
+                            {{ issue.summary }}
+                        </h3>
+                    </div>
+                    {% if issue.link %}
+                    <a href="{{ issue.link }}" target="_blank" class="btn btn-outline" style="text-decoration: none; border-color: var(--accent); color: var(--accent);">
+                        ↗️ Open natively in Jira
+                    </a>
                     {% endif %}
                 </div>
-                <h3 style="font-size: 1.15rem; color: var(--text-primary); margin: 0; line-height: 1.4;">
-                    {{ issue.summary }}
-                </h3>
+                
+                <div style="background: rgba(0,0,0,0.15); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 30px;">
+                    <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Description</h4>
+                    <div style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: var(--text-primary);">
+                        {% if issue.description %}
+                            {{ issue.description }}
+                        {% else %}
+                            <em class="text-muted">No description provided.</em>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- AUTOLOADING CHILD TREE SECTION -->
+                <div id="hierarchy-section" style="margin-bottom: 20px; display: none;">
+                    <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Issue Hierarchy Snapshot</h4>
+                    <div id="tree-container-{{ issue.key }}" style="border-left: 2px solid var(--border); padding-left: 15px; margin-left: 5px;">
+                        <div class="text-muted" style="font-size: 0.9rem;"><span class="spinner"></span> Analyzing hierarchy tree...</div>
+                    </div>
+                </div>
+
             </div>
-            {% if issue.link %}
-            <a href="{{ issue.link }}" target="_blank" class="btn btn-primary" style="text-decoration: none;">
-                ↗️ Open in Jira
-            </a>
-            {% endif %}
-        </div>
-        
-        <div style="background: rgba(0,0,0,0.15); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px;">
-            <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Description</h4>
-            <div style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: var(--text-primary);">
-                {% if issue.description %}
-                    {{ issue.description }}
-                {% else %}
-                    <em class="text-muted">No description provided.</em>
-                {% endif %}
+
+            <!-- RIGHT COLUMN (Actions) -->
+            <div style="width: 320px; flex-shrink: 0; padding-left: 1rem; border-left: 1px solid var(--border);">
+                <div style="background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border); padding: 1.25rem;">
+                    <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        <span>⚡</span> Actions Menu
+                    </h4>
+                    <p class="text-muted" style="font-size: 0.75rem; margin-bottom: 15px; line-height: 1.4;">
+                        Select an action to modify or update the current issue. (Coming soon)
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <button class="btn btn-primary" style="justify-content: center; width: 100%; opacity: 0.6; cursor: not-allowed;" disabled>➕ Create Subtask</button>
+                        <button class="btn btn-outline" style="justify-content: center; width: 100%; opacity: 0.6; cursor: not-allowed;" disabled>🔄 Change Status</button>
+                        <button class="btn btn-outline" style="justify-content: center; width: 100%; opacity: 0.6; cursor: not-allowed;" disabled>👤 Assign User</button>
+                        <button class="btn btn-outline" style="justify-content: center; width: 100%; opacity: 0.6; cursor: not-allowed;" disabled>⏱️ Log Work</button>
+                        <div style="height: 1px; background: var(--border); margin: 5px 0;"></div>
+                        <button class="btn btn-outline" style="justify-content: center; width: 100%; color: var(--danger); border-color: rgba(239, 68, 68, 0.4); opacity: 0.6; cursor: not-allowed;" disabled>🗑️ Delete Issue</button>
+                    </div>
+                </div>
             </div>
+
         </div>
 
-        <div class="mt-2 text-center">
-            <button onclick="window.history.back()" class="btn btn-outline" style="text-decoration: none; border: none;">← Go Back</button>
+        <div class="mt-2" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 30px;">
+            <button onclick="window.history.back()" class="btn btn-outline" style="text-decoration: none; border: none; padding-left: 0;">← Go Back</button>
         </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    {% if issue %}
+    const ROOT_ISSUE_KEY = "{{ issue.key }}";
+    const ROOT_ISSUE_TYPE = "{{ issue.issue_type }}".toLowerCase();
+    
+    // Mount correct icon into root header
+    document.getElementById('main-issue-icon').textContent = getIssueIcon(ROOT_ISSUE_TYPE);
+
+    // Initial Trigger for Tree map if the root can potentially have children
+    if (!ROOT_ISSUE_TYPE.includes('sub')) {
+        document.getElementById('hierarchy-section').style.display = 'block';
+        fetchAndRenderChildren(ROOT_ISSUE_KEY, ROOT_ISSUE_TYPE, document.getElementById(`tree-container-${ROOT_ISSUE_KEY}`));
+    }
+
+    async function fetchAndRenderChildren(parentKey, parentType, containerEl) {
+        try {
+            const res = await fetch(`/api/subtasks/${parentKey}/`);
+            const data = await res.json();
+            
+            // Immediately clean up the loading spinner text sitting right before this container
+            if (containerEl.previousElementSibling && containerEl.previousElementSibling.classList.contains('nested-loader-text')) {
+                containerEl.previousElementSibling.remove();
+            }
+
+            if (!data.success) {
+                containerEl.innerHTML = `<div class="text-muted alert alert-error" style="font-size: 0.85rem; padding: 0.5rem; margin-top: 10px;">⚠️ Failed to load hierarchy: ${esc(data.error)}</div>`;
+                return;
+            }
+
+            if (data.subtasks.length === 0) {
+                if (containerEl.id === `tree-container-${ROOT_ISSUE_KEY}`) {
+                    // It's the top level root check and there's no children.
+                    document.getElementById('hierarchy-section').style.display = 'none';
+                } else {
+                    containerEl.innerHTML = '';
+                }
+                return;
+            }
+
+            let html = '';
+            data.subtasks.forEach(st => {
+                const stType = (st.issue_type || '').toLowerCase();
+                const canHaveChildren = !stType.includes('sub');
+                
+                html += `
+                    <div class="accordion-item" style="border: 1px solid var(--border); margin-bottom: 8px; border-radius: 6px; background: var(--bg-card); margin-top: 10px;">
+                        <div class="accordion-header" onclick="toggleAccordion(this)" style="padding: 10px 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 4px;">
+                            <div class="left" style="display: flex; align-items: center; gap: 8px;">
+                                <span class="issue-icon" title="${esc(st.issue_type)}">${getIssueIcon(stType)}</span>
+                                <span class="issue-key" style="font-size:.85rem; font-weight: 600;">${esc(st.key)}</span>
+                                <a href="/issue/${st.key}/" target="_blank" style="text-decoration:none; margin-left:5px;" title="Open isolated view" onclick="event.stopPropagation()">🔗</a>
+                                <span style="font-size:.95rem; color: var(--text-primary); margin-left: 5px;">${esc(st.summary)}</span>
+                                <span class="badge badge-status" style="font-size:.65rem; padding: 0.1rem 0.4rem; margin-left: 5px;">${esc(st.status)}</span>
+                            </div>
+                            <div class="right" style="display: flex; align-items: center; gap: 10px;">
+                                <span class="chevron" style="transition: transform 0.2s; font-size: 0.8rem; color: var(--text-muted);">▶</span>
+                            </div>
+                        </div>
+                        <div class="accordion-body" style="display: none; border-top: 1px solid var(--border); background: var(--bg-secondary);">
+                            <div class="accordion-body-inner" style="padding: 15px; font-size: 0.9rem; line-height: 1.5; color: var(--text-secondary); white-space: pre-wrap;">${st.description ? esc(st.description) : '<em class="text-muted">No description provided.</em>'}</div>
+                            ${canHaveChildren ? `
+                                <div style="padding: 0 15px 15px 15px; margin-left: 10px; margin-bottom: 15px; border-left: 2px solid rgba(99,102,241, 0.3);">
+                                    <div class="nested-loader-text text-muted" style="font-size: 0.75rem; margin-bottom: 5px;"><span class="spinner" style="width:10px; height:10px; border-width: 1px;"></span> Indexing sub-children...</div>
+                                    <div id="tree-container-${st.key}"></div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>`;
+            });
+
+            containerEl.innerHTML = html;
+
+            // Trigger recursive fetch for any children that aren't subtasks! Wow!
+            data.subtasks.forEach(st => {
+                const stType = (st.issue_type || '').toLowerCase();
+                if (!stType.includes('sub')) {
+                    fetchAndRenderChildren(st.key, stType, document.getElementById(`tree-container-${st.key}`));
+                }
+            });
+
+        } catch (err) {
+            containerEl.innerHTML = `<div class="text-muted alert alert-error" style="font-size: 0.85rem; padding: 0.5rem; margin-top: 10px;">⚠️ Exception loading children: ${esc(err.message)}</div>`;
+        }
+    }
+
+    function esc(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = typeof str === 'string' ? str : JSON.stringify(str);
+        return div.innerHTML;
+    }
+
+    function getIssueIcon(type) {
+        const t = (type || '').toLowerCase();
+        if (t.includes('epic')) return '⚡';
+        if (t.includes('story')) return '📖';
+        if (t.includes('bug')) return '🐛';
+        if (t.includes('task')) return '📋';
+        if (t.includes('sub')) return '🗃️';
+        return '📄';
+    }
+
+    function toggleAccordion(header) {
+        header.classList.toggle('open');
+        const body = header.nextElementSibling;
+        const chevron = header.querySelector('.chevron');
+        if (header.classList.contains('open')) {
+            if (body) {
+                body.classList.add('open');
+                body.style.display = 'block';
+            }
+            if (chevron) chevron.style.transform = 'rotate(90deg)';
+        } else {
+            if (body) {
+                body.classList.remove('open');
+                body.style.display = 'none';
+            }
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        }
+    }
+    {% endif %}
+</script>
 {% endblock %}

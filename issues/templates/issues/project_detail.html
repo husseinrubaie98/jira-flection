@@ -104,10 +104,11 @@
                     loadedIssuesSet.add(issue.key);
                     newlyAddedCount++;
                     rows += `
-                        <tr id="row-${issue.key}">
+                        <tr id="row-${issue.key}" class="issue-row-hover">
                             <td>
                                 <span class="issue-icon" style="margin-right:5px;" title="${esc(issue.issue_type)}">${getIssueIcon(issue.issue_type)}</span>
                                 <span class="issue-key">${esc(issue.key)}</span>
+                                ${getExternalLink(issue)}
                             </td>
                             <td class="issue-summary" title="${esc(issue.description).replace(/"/g, '&quot;')}">${esc(issue.summary)}</td>
                             <td><span class="badge badge-status">${esc(issue.status)}</span></td>
@@ -275,10 +276,11 @@
             totalIssuesLoaded += 1;
             
             let row = `
-                <tr id="row-${issue.key}" style="background-color: var(--accent-glow); transition: background-color 2s;">
+                <tr id="row-${issue.key}" class="issue-row-hover" style="background-color: var(--accent-glow); transition: background-color 2s;">
                     <td>
                         <span class="issue-icon" style="margin-right:5px;" title="${esc(issue.issue_type)}">${getIssueIcon(issue.issue_type)}</span>
                         <span class="issue-key">${esc(issue.key)}</span>
+                        ${getExternalLink(issue)}
                     </td>
                     <td class="issue-summary" title="${esc(issue.description).replace(/"/g, '&quot;')}">${esc(issue.summary)}</td>
                     <td><span class="badge badge-status">${esc(issue.status)}</span></td>
@@ -435,6 +437,7 @@
                             <div class="left" style="display: flex; align-items: center; gap: 10px;">
                                 <span class="issue-icon" title="${esc(st.issue_type)}">${getIssueIcon(st.issue_type)}</span>
                                 <span class="issue-key" style="font-size:.8rem; font-weight: 600;">${esc(st.key)}</span>
+                                ${getExternalLink(st)}
                                 <span style="font-size:.9rem;">${esc(st.summary)}</span>
                                 <span class="badge badge-status" style="font-size:.7rem;">${esc(st.status)}</span>
                             </div>
@@ -498,6 +501,12 @@
         return '📄';
     }
 
+    function getExternalLink(issue) {
+        const t = (issue.issue_type || '').toLowerCase();
+        if (t.includes('sub')) return ''; // Hide button for subtasks
+        return `<a href="/issue/${issue.key}/" target="_blank" class="external-link btn btn-outline" style="padding: 0.1rem 0.4rem; font-size: 0.7rem; border-color: var(--accent); color: var(--accent); margin-left: 10px; opacity: 0; transition: opacity 0.2s;" onclick="event.stopPropagation()">🔗 Default View</a>`;
+    }
+
     function getActionButton(issue, isAccordion = false) {
         const t = (issue.issue_type || '').toLowerCase();
         const eventParam = isAccordion ? ', event' : '';
@@ -513,4 +522,10 @@
         }
     }
 </script>
+<style>
+    .issue-row-hover:hover .external-link,
+    .accordion-header:hover .external-link {
+        opacity: 1 !important;
+    }
+</style>
 {% endblock %}
