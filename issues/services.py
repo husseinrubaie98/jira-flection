@@ -126,7 +126,7 @@ class JiraService:
 
         return sorted(all_projects, key=lambda x: x['name'])
 
-    def get_issues(self, project_key, next_page_token=None, issue_type=None):
+    def get_issues(self, project_key, next_page_token=None, issue_type=None, include_done=False):
         """Fetch a page of issues for a given project using v3 search."""
         jql = f'project="{project_key}"'
         if issue_type:
@@ -134,6 +134,9 @@ class JiraService:
         else:
             jql += ' AND issuetype != "Sub-task" AND issuetype != "Subtask"'
             
+        if not include_done:
+            jql += ' AND status != "Done" AND status != "Dropped"'
+
         params = {
             'jql': jql,
             'fields': 'summary,description,issuetype,status,priority',
@@ -155,6 +158,7 @@ class JiraService:
                 'summary': fields.get('summary', ''),
                 'description': description or '',
                 'issue_type': fields.get('issuetype', {}).get('name', ''),
+                'issue_type_icon': fields.get('issuetype', {}).get('iconUrl', ''),
                 'status': fields.get('status', {}).get('name', ''),
                 'priority': fields.get('priority', {}).get('name', '') if fields.get('priority') else '',
             })
@@ -183,6 +187,7 @@ class JiraService:
                 'summary': fields.get('summary', ''),
                 'description': description or '',
                 'issue_type': fields.get('issuetype', {}).get('name', ''),
+                'issue_type_icon': fields.get('issuetype', {}).get('iconUrl', ''),
                 'status': fields.get('status', {}).get('name', ''),
                 'priority': fields.get('priority', {}).get('name', '') if fields.get('priority') else '',
             })
@@ -202,6 +207,7 @@ class JiraService:
             'summary': fields.get('summary', ''),
             'description': description or '',
             'issue_type': fields.get('issuetype', {}).get('name', ''),
+            'issue_type_icon': fields.get('issuetype', {}).get('iconUrl', ''),
             'status': fields.get('status', {}).get('name', ''),
             'priority': fields.get('priority', {}).get('name', '') if fields.get('priority') else '',
             'link': f"{self.base_url}/browse/{data.get('key', '')}"

@@ -41,8 +41,9 @@ def api_load_issues(request, project_key):
     jira = JiraService()
     next_page_token = request.GET.get('nextPageToken')
     issue_type = request.GET.get('issue_type')
+    include_done = request.GET.get('include_done') == 'true'
     try:
-        data = jira.get_issues(project_key, next_page_token, issue_type)
+        data = jira.get_issues(project_key, next_page_token, issue_type, include_done)
         return JsonResponse({
             'success': True, 
             'issues': data['issues'], 

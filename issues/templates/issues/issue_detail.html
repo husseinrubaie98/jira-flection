@@ -18,7 +18,13 @@
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
                     <div>
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                            <span class="issue-icon" id="main-issue-icon" style="font-size: 1.25rem;">📄</span>
+                            <span class="issue-icon" id="main-issue-icon" style="font-size: 1.25rem;">
+                                {% if issue.issue_type_icon %}
+                                    <img src="{{ issue.issue_type_icon }}" alt="{{ issue.issue_type }}" style="width: 24px; height: 24px; vertical-align: middle;">
+                                {% else %}
+                                    📄
+                                {% endif %}
+                            </span>
                             <span class="issue-key" style="font-size: 1.25rem; font-weight: 700;">{{ issue.key }}</span>
                             <span class="badge badge-status" style="font-size: 0.75rem;">{{ issue.status }}</span>
                             <span class="badge badge-type" style="font-size: 0.75rem;">{{ issue.issue_type }}</span>
@@ -92,9 +98,14 @@
     {% if issue %}
     const ROOT_ISSUE_KEY = "{{ issue.key }}";
     const ROOT_ISSUE_TYPE = "{{ issue.issue_type }}".toLowerCase();
+    const ROOT_ISSUE_ICON = "{{ issue.issue_type_icon|safe }}";
     
-    // Mount correct icon into root header
-    document.getElementById('main-issue-icon').textContent = getIssueIcon(ROOT_ISSUE_TYPE);
+    // Mount correct icon into root header (if not already handled by template)
+    if (ROOT_ISSUE_ICON) {
+        document.getElementById('main-issue-icon').innerHTML = `<img src="${ROOT_ISSUE_ICON}" alt="${esc(ROOT_ISSUE_TYPE)}" style="width: 24px; height: 24px; vertical-align: middle;">`;
+    } else {
+        document.getElementById('main-issue-icon').textContent = getIssueIcon(ROOT_ISSUE_TYPE);
+    }
 
     // Initial Trigger for Tree map if the root can potentially have children
     if (!ROOT_ISSUE_TYPE.includes('sub')) {
@@ -136,7 +147,7 @@
                     <div class="accordion-item" style="border: 1px solid var(--border); margin-bottom: 8px; border-radius: 6px; background: var(--bg-card); margin-top: 10px;">
                         <div class="accordion-header" onclick="toggleAccordion(this)" style="padding: 10px 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 4px;">
                             <div class="left" style="display: flex; align-items: center; gap: 8px;">
-                                <span class="issue-icon" title="${esc(st.issue_type)}">${getIssueIcon(stType)}</span>
+                                <span class="issue-icon" title="${esc(st.issue_type)}">${getIssueIcon(stType, st.issue_type_icon)}</span>
                                 <span class="issue-key" style="font-size:.85rem; font-weight: 600;">${esc(st.key)}</span>
                                 <a href="/issue/${st.key}/" target="_blank" style="text-decoration:none; margin-left:5px;" title="Open isolated view" onclick="event.stopPropagation()">🔗</a>
                                 <span style="font-size:.95rem; color: var(--text-primary); margin-left: 5px;">${esc(st.summary)}</span>
@@ -180,7 +191,10 @@
         return div.innerHTML;
     }
 
-    function getIssueIcon(type) {
+    function getIssueIcon(type, iconUrl) {
+        if (iconUrl) {
+            return `<img src="${iconUrl}" alt="${esc(type)}" style="width: 16px; height: 16px; vertical-align: middle;">`;
+        }
         const t = (type || '').toLowerCase();
         if (t.includes('epic')) return '⚡';
         if (t.includes('story')) return '📖';

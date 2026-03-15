@@ -18,6 +18,7 @@ Jira-Flection is a powerful Django-based web application designed to natively in
     - 🐛 Bugs 
     - 🗃️ Subtasks
 - **Sleek Accordion View**: Subtask descriptions cleanly open downward organically in their native rows instead of blocking out the screen or creating empty whitespace.  
+- **Status Filtering (Load Done)**: Automatically filters out issues marked as "Done" or "Dropped" by default to keep your workspace clean. Toggle the "Load Done" checkbox to retrieve the full project history.
 - **Dedicated Isolated Ticket Views**: Hover over any ticket in the grid and click the "🔗 Default View" button to instantly drop into a dedicated tab. 
     - This mode features a pristine 2-column SaaS layout mapping the ticket data on the left with a dedicated "Actions Menu" sidebar on the right.
     - Features a **Recursive Auto-Loading Snapshot Tree**! Upon loading the page, the system crawls Jira, finds every linked Story to that Epic, then autonomously crawls every Story to find every associated Subtask, building the entire family tree of your project inside dynamic nested accordions on the spot without needing manual requests!

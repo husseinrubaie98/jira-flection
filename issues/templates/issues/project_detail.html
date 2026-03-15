@@ -26,6 +26,10 @@
                 <input type="text" id="input-search-issue" class="form-control" placeholder="Issue Key (e.g. DP-1)" style="width: 180px; padding: 0.4rem 0.8rem; margin: 0;" required>
                 <button type="submit" class="btn btn-outline" id="btn-search-issue" style="padding: 0.4rem 0.8rem;">Search</button>
             </form>
+            <div style="display: flex; align-items: center; gap: 5px; margin-left:10px;">
+                <input type="checkbox" id="check-load-done" style="width: 16px; height: 16px; cursor: pointer;">
+                <label for="check-load-done" style="font-size: 0.85rem; cursor: pointer; color: var(--text-secondary);">Load Done</label>
+            </div>
         </div>
     </div>
 </div>
@@ -70,6 +74,10 @@
             const params = new URLSearchParams();
             if (isNextPage && nextPageToken) params.append('nextPageToken', nextPageToken);
             if (currentIssueTypeFilter) params.append('issue_type', currentIssueTypeFilter);
+            
+            const checkDone = document.getElementById('check-load-done');
+            if (checkDone && checkDone.checked) params.append('include_done', 'true');
+            
             if (params.toString()) url += `?${params.toString()}`;
             
             const res = await fetch(url);
@@ -106,7 +114,7 @@
                     rows += `
                         <tr id="row-${issue.key}" class="issue-row-hover">
                             <td>
-                                <span class="issue-icon" style="margin-right:5px;" title="${esc(issue.issue_type)}">${getIssueIcon(issue.issue_type)}</span>
+                                <span class="issue-icon" style="margin-right:5px;" title="${esc(issue.issue_type)}">${getIssueIcon(issue.issue_type, issue.issue_type_icon)}</span>
                                 <span class="issue-key">${esc(issue.key)}</span>
                                 ${getExternalLink(issue)}
                             </td>
@@ -278,7 +286,7 @@
             let row = `
                 <tr id="row-${issue.key}" class="issue-row-hover" style="background-color: var(--accent-glow); transition: background-color 2s;">
                     <td>
-                        <span class="issue-icon" style="margin-right:5px;" title="${esc(issue.issue_type)}">${getIssueIcon(issue.issue_type)}</span>
+                        <span class="issue-icon" style="margin-right:5px;" title="${esc(issue.issue_type)}">${getIssueIcon(issue.issue_type, issue.issue_type_icon)}</span>
                         <span class="issue-key">${esc(issue.key)}</span>
                         ${getExternalLink(issue)}
                     </td>
@@ -344,6 +352,8 @@
     }
 
     function getSearchHeaderHTML() {
+        const checkDone = document.getElementById('check-load-done');
+        const isChecked = checkDone ? checkDone.checked : false;
         return `
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 15px;">
                 <button class="btn btn-primary" id="btn-load-issues" onclick="loadIssues()">
@@ -360,6 +370,10 @@
                     <input type="text" id="input-search-issue" class="form-control" placeholder="Issue Key (e.g. DP-1)" style="width: 180px; padding: 0.4rem 0.8rem; margin: 0;" required>
                     <button type="submit" class="btn btn-outline" id="btn-search-issue" style="padding: 0.4rem 0.8rem;">Search</button>
                 </form>
+                <div style="display: flex; align-items: center; gap: 5px; margin-left:10px;">
+                    <input type="checkbox" id="check-load-done" ${isChecked ? 'checked' : ''} style="width: 16px; height: 16px; cursor: pointer;">
+                    <label for="check-load-done" style="font-size: 0.85rem; cursor: pointer; color: var(--text-secondary);">Load Done</label>
+                </div>
             </div>`;
     }
 
@@ -435,7 +449,7 @@
                     <div class="accordion-item" style="border: 1px solid var(--border-color, #dee2e6); margin-bottom: 5px; border-radius: 4px; background: #fff;">
                         <div class="accordion-header" onclick="toggleAccordion(this)" style="padding: 10px 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 4px;">
                             <div class="left" style="display: flex; align-items: center; gap: 10px;">
-                                <span class="issue-icon" title="${esc(st.issue_type)}">${getIssueIcon(st.issue_type)}</span>
+                                <span class="issue-icon" title="${esc(st.issue_type)}">${getIssueIcon(st.issue_type, st.issue_type_icon)}</span>
                                 <span class="issue-key" style="font-size:.8rem; font-weight: 600;">${esc(st.key)}</span>
                                 ${getExternalLink(st)}
                                 <span style="font-size:.9rem;">${esc(st.summary)}</span>
@@ -491,7 +505,10 @@
         return div.innerHTML;
     }
 
-    function getIssueIcon(type) {
+    function getIssueIcon(type, iconUrl) {
+        if (iconUrl) {
+            return `<img src="${iconUrl}" alt="${esc(type)}" style="width: 16px; height: 16px; vertical-align: middle;">`;
+        }
         const t = (type || '').toLowerCase();
         if (t.includes('epic')) return '⚡';
         if (t.includes('story')) return '📖';
