@@ -82,6 +82,9 @@
             
             const res = await fetch(url);
             const data = await res.json();
+            
+            // CRITICAL FIX: Update the global nextPageToken with the new one from Jira
+            nextPageToken = data.nextPageToken;
 
             if (!data.success) {
                 if (!isNextPage) {
@@ -222,9 +225,18 @@
         const btnEpics = document.getElementById('btn-load-epics');
         if (btnEpics) btnEpics.disabled = true;
 
-        await loadIssues(false);
-        while (nextPageToken) {
-            await loadIssues(true);
+        try {
+            await loadIssues(false);
+            while (nextPageToken) {
+                await loadIssues(true);
+            }
+        } finally {
+            if (btnAll) {
+                btnAll.disabled = false;
+                btnAll.innerHTML = '⬇️ Load All Issues';
+            }
+            if (btn) btn.disabled = false;
+            if (btnEpics) btnEpics.disabled = false;
         }
     }
 

@@ -3,6 +3,21 @@
 {% block title %}Issue {{ issue_key }} – Jira-Flection{% endblock %}
 {% block page_title %}Issue Details: {{ issue_key }}{% endblock %}
 
+{% block extra_head %}
+<style>
+    .issue-key-link {
+        text-decoration: none;
+        color: inherit;
+        font-weight: 700;
+        transition: color 0.2s;
+    }
+    .issue-key-link:hover {
+        text-decoration: underline;
+        color: var(--accent) !important;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="card" style="margin-top: 1rem;">
     {% if error %}
@@ -25,7 +40,9 @@
                                     📄
                                 {% endif %}
                             </span>
-                            <span class="issue-key" style="font-size: 1.25rem; font-weight: 700;">{{ issue.key }}</span>
+                            <a href="/issue/{{ issue.key }}/" target="_blank" class="issue-key-link">
+                                <span class="issue-key" style="font-size: 1.25rem; font-weight: 700;">{{ issue.key }}</span>
+                            </a>
                             <span class="badge badge-status" style="font-size: 0.75rem;">{{ issue.status }}</span>
                             <span class="badge badge-type" style="font-size: 0.75rem;">{{ issue.issue_type }}</span>
                             {% if issue.priority %}
@@ -86,9 +103,7 @@
 
         </div>
 
-        <div class="mt-2" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 30px;">
-            <button onclick="window.history.back()" class="btn btn-outline" style="text-decoration: none; border: none; padding-left: 0;">← Go Back</button>
-        </div>
+
     {% endif %}
 </div>
 {% endblock %}
@@ -148,7 +163,9 @@
                         <div class="accordion-header" onclick="toggleAccordion(this)" style="padding: 10px 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 4px;">
                             <div class="left" style="display: flex; align-items: center; gap: 8px;">
                                 <span class="issue-icon" title="${esc(st.issue_type)}">${getIssueIcon(stType, st.issue_type_icon)}</span>
-                                <span class="issue-key" style="font-size:.85rem; font-weight: 600;">${esc(st.key)}</span>
+                                <a href="/issue/${st.key}/" target="_blank" class="issue-key-link">
+                                    <span class="issue-key" style="font-size:.85rem; font-weight: 600;">${esc(st.key)}</span>
+                                </a>
                                 <a href="/issue/${st.key}/" target="_blank" style="text-decoration:none; margin-left:5px;" title="Open isolated view" onclick="event.stopPropagation()">🔗</a>
                                 <span style="font-size:.95rem; color: var(--text-primary); margin-left: 5px;">${esc(st.summary)}</span>
                                 <span class="badge badge-status" style="font-size:.65rem; padding: 0.1rem 0.4rem; margin-left: 5px;">${esc(st.status)}</span>
