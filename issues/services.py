@@ -126,10 +126,16 @@ class JiraService:
 
         return sorted(all_projects, key=lambda x: x['name'])
 
-    def get_issues(self, project_key, next_page_token=None):
+    def get_issues(self, project_key, next_page_token=None, issue_type=None):
         """Fetch a page of issues for a given project using v3 search."""
+        jql = f'project="{project_key}"'
+        if issue_type:
+            jql += f' AND issuetype="{issue_type}"'
+        else:
+            jql += ' AND issuetype != "Sub-task" AND issuetype != "Subtask"'
+            
         params = {
-            'jql': f'project="{project_key}"',
+            'jql': jql,
             'fields': 'summary,description,issuetype,status,priority',
             'maxResults': 50
         }

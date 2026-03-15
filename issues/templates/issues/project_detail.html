@@ -18,6 +18,9 @@
             <button class="btn btn-outline" id="btn-load-all-issues" onclick="loadAllIssues()">
                 ⬇️ Load All Issues
             </button>
+            <button class="btn btn-outline" id="btn-load-epics" onclick="loadIssues(false, 'Epic')">
+                ⚡ Load Epics
+            </button>
             <div style="width: 1px; height: 30px; background: var(--border); margin: 0 5px;"></div>
             <form id="search-single-form" style="display: flex; gap: 5px;" onsubmit="searchSingleIssue(event)">
                 <input type="text" id="input-search-issue" class="form-control" placeholder="Issue Key (e.g. DP-1)" style="width: 180px; padding: 0.4rem 0.8rem; margin: 0;" required>
@@ -39,15 +42,17 @@
     const loadedIssuesSet = new Set();
     // Flag to track if the table has been initialized
     let isTableInitialized = false;
+    let currentIssueTypeFilter = null;
 
-    async function loadIssues(isNextPage = false) {
+    async function loadIssues(isNextPage = false, typeFilter = null) {
         if (isLoading) return;
         isLoading = true;
 
         const area = document.getElementById('issues-area');
         
         if (!isNextPage) {
-            const btn = document.getElementById('btn-load-issues');
+            currentIssueTypeFilter = typeFilter;
+            const btn = document.getElementById(typeFilter === 'Epic' ? 'btn-load-epics' : 'btn-load-issues');
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<span class="spinner"></span> Loading…';
@@ -62,9 +67,11 @@
 
         try {
             let url = `/api/issues/${PROJECT_KEY}/`;
-            if (isNextPage && nextPageToken) {
-                url += `?nextPageToken=${encodeURIComponent(nextPageToken)}`;
-            }
+            const params = new URLSearchParams();
+            if (isNextPage && nextPageToken) params.append('nextPageToken', nextPageToken);
+            if (currentIssueTypeFilter) params.append('issue_type', currentIssueTypeFilter);
+            if (params.toString()) url += `?${params.toString()}`;
+            
             const res = await fetch(url);
             const data = await res.json();
 
@@ -98,20 +105,19 @@
                     newlyAddedCount++;
                     rows += `
                         <tr id="row-${issue.key}">
-                            <td><span class="issue-key">${esc(issue.key)}</span></td>
+                            <td>
+                                <span class="issue-icon" style="margin-right:5px;" title="${esc(issue.issue_type)}">${getIssueIcon(issue.issue_type)}</span>
+                                <span class="issue-key">${esc(issue.key)}</span>
+                            </td>
                             <td class="issue-summary" title="${esc(issue.description).replace(/"/g, '&quot;')}">${esc(issue.summary)}</td>
                             <td><span class="badge badge-status">${esc(issue.status)}</span></td>
                             <td>
-                                <button class="btn btn-outline btn-sm"
-                                        onclick="loadSubtasks('${issue.key}', this)"
-                                        data-loaded="false">
-                                    📎 Load Subtasks
-                                </button>
+                                ${getActionButton(issue)}
                             </td>
                         </tr>
                         <tr id="subtasks-row-${issue.key}" class="subtasks-container-row" style="display: none;">
                             <td colspan="4" style="padding: 0; border-bottom: none;">
-                                <div class="subtask-container" id="subtasks-${issue.key}" style="padding: 10px; background: rgba(0,0,0,0.02);"></div>
+                                <div class="subtask-container" id="children-${issue.key}" style="padding: 10px; background: rgba(0,0,0,0.02);"></div>
                             </td>
                         </tr>`;
                 }
@@ -169,9 +175,30 @@
                 area.innerHTML = `<div class="alert alert-error">⚠️ Failed to load issues: ${err.message}</div>`;
             } else {
                 alert('Failed to load issues: ' + err.message);
+                // Reset load more button
+                const existingBtn = document.getElementById('btn-load-more');
+                if (existingBtn) {
+                    existingBtn.disabled = false;
+                    existingBtn.innerHTML = 'Load More';
+                }
             }
             nextPageToken = null;
         }
+        
+        if (!isNextPage) {
+            const btn = document.getElementById(typeFilter === 'Epic' ? 'btn-load-epics' : 'btn-load-issues');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = typeFilter === 'Epic' ? '⚡ Load Epics' : '⬇️ Load Issues (Paged)';
+            }
+        } else {
+            const existingBtn = document.getElementById('btn-load-more');
+            if (existingBtn) {
+                existingBtn.disabled = false;
+                existingBtn.innerHTML = 'Load More';
+            }
+        }
+        
         isLoading = false;
     }
 
@@ -183,6 +210,8 @@
         }
         const btn = document.getElementById('btn-load-issues');
         if (btn) btn.disabled = true;
+        const btnEpics = document.getElementById('btn-load-epics');
+        if (btnEpics) btnEpics.disabled = true;
 
         await loadIssues(false);
         while (nextPageToken) {
@@ -247,20 +276,19 @@
             
             let row = `
                 <tr id="row-${issue.key}" style="background-color: var(--accent-glow); transition: background-color 2s;">
-                    <td><span class="issue-key">${esc(issue.key)}</span></td>
+                    <td>
+                        <span class="issue-icon" style="margin-right:5px;" title="${esc(issue.issue_type)}">${getIssueIcon(issue.issue_type)}</span>
+                        <span class="issue-key">${esc(issue.key)}</span>
+                    </td>
                     <td class="issue-summary" title="${esc(issue.description).replace(/"/g, '&quot;')}">${esc(issue.summary)}</td>
                     <td><span class="badge badge-status">${esc(issue.status)}</span></td>
                     <td>
-                        <button class="btn btn-outline btn-sm"
-                                onclick="loadSubtasks('${issue.key}', this)"
-                                data-loaded="false">
-                            📎 Load Subtasks
-                        </button>
+                        ${getActionButton(issue)}
                     </td>
                 </tr>
                 <tr id="subtasks-row-${issue.key}" class="subtasks-container-row" style="display: none;">
                     <td colspan="4" style="padding: 0; border-bottom: none;">
-                        <div class="subtask-container" id="subtasks-${issue.key}" style="padding: 10px; background: rgba(0,0,0,0.02);"></div>
+                        <div class="subtask-container" id="children-${issue.key}" style="padding: 10px; background: rgba(0,0,0,0.02);"></div>
                     </td>
                 </tr>`;
 
@@ -322,6 +350,9 @@
                 <button class="btn btn-outline" id="btn-load-all-issues" onclick="loadAllIssues()">
                     ⬇️ Load All Issues
                 </button>
+                <button class="btn btn-outline" id="btn-load-epics" onclick="loadIssues(false, 'Epic')">
+                    ⚡ Load Epics
+                </button>
                 <div style="width: 1px; height: 30px; background: var(--border); margin: 0 5px;"></div>
                 <form id="search-single-form" style="display: flex; gap: 5px;" onsubmit="searchSingleIssue(event)">
                     <input type="text" id="input-search-issue" class="form-control" placeholder="Issue Key (e.g. DP-1)" style="width: 180px; padding: 0.4rem 0.8rem; margin: 0;" required>
@@ -330,18 +361,53 @@
             </div>`;
     }
 
-    async function loadSubtasks(issueKey, btn) {
-        const subtasksRow = document.getElementById(`subtasks-row-${issueKey}`);
+    async function loadChildren(issueKey, childLabel, btn, event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        const isAccordion = btn.dataset.isAccordion === 'true';
+        let containerRow = document.getElementById(`subtasks-row-${issueKey}`);
+        let container = document.getElementById(`children-${issueKey}`);
         
+        // Toggle logic
         if (btn.dataset.loaded === 'true') {
-            subtasksRow.style.display = subtasksRow.style.display === 'none' ? 'table-row' : 'none';
+            if (containerRow) {
+                containerRow.style.display = containerRow.style.display === 'none' ? 'table-row' : 'none';
+            } else if (isAccordion && container) {
+                container.style.display = container.style.display === 'none' ? 'block' : 'none';
+            }
             return;
         }
 
+        // Force open accordion if inside one
+        if (isAccordion) {
+            const header = btn.closest('.accordion-header');
+            if (header && !header.classList.contains('open')) {
+                header.classList.add('open');
+                const body = header.nextElementSibling;
+                const chevron = header.querySelector('.chevron');
+                if (body) {
+                    body.classList.add('open');
+                    body.style.display = 'block';
+                }
+                if (chevron) chevron.style.transform = 'rotate(90deg)';
+            }
+        }
+        
+        // Also ensure the actual internal children container unhides if nestled inside another
+        if (container) {
+            container.style.display = 'block';
+        }
+
+        if (containerRow) {
+            containerRow.style.display = 'table-row';
+        }
+
+        const originalText = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> Loading…';
-        const container = document.getElementById(`subtasks-${issueKey}`);
-        subtasksRow.style.display = 'table-row';
 
         try {
             const res = await fetch(`/api/subtasks/${issueKey}/`);
@@ -350,43 +416,49 @@
             if (!data.success) {
                 container.innerHTML = `<div class="alert alert-error" style="margin-top:.5rem;">⚠️ ${data.error}</div>`;
                 btn.disabled = false;
-                btn.textContent = '📎 Load Subtasks';
+                btn.innerHTML = originalText;
                 return;
             }
 
             if (data.subtasks.length === 0) {
-                container.innerHTML = `<p class="text-muted" style="font-size:.85rem; margin: 0; padding: 10px;">No subtasks found.</p>`;
-                btn.textContent = '📎 No Subtasks';
+                container.innerHTML = `<p class="text-muted" style="margin: 0; padding: 10px;">No ${childLabel.toLowerCase()} found.</p>`;
+                btn.innerHTML = `📎 No ${childLabel}`;
                 btn.disabled = true;
                 return;
             }
 
             let html = '';
-            data.subtasks.forEach((st, i) => {
+            data.subtasks.forEach(st => {
                 html += `
                     <div class="accordion-item" style="border: 1px solid var(--border-color, #dee2e6); margin-bottom: 5px; border-radius: 4px; background: #fff;">
                         <div class="accordion-header" onclick="toggleAccordion(this)" style="padding: 10px 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 4px;">
                             <div class="left" style="display: flex; align-items: center; gap: 10px;">
+                                <span class="issue-icon" title="${esc(st.issue_type)}">${getIssueIcon(st.issue_type)}</span>
                                 <span class="issue-key" style="font-size:.8rem; font-weight: 600;">${esc(st.key)}</span>
                                 <span style="font-size:.9rem;">${esc(st.summary)}</span>
                                 <span class="badge badge-status" style="font-size:.7rem;">${esc(st.status)}</span>
                             </div>
-                            <span class="chevron" style="transition: transform 0.2s; font-size: 0.8rem; color: #666;">▶</span>
+                            <div class="right" style="display: flex; align-items: center; gap: 10px;">
+                                ${getActionButton(st, true)}
+                                <span class="chevron" style="transition: transform 0.2s; font-size: 0.8rem; color: #666;">▶</span>
+                            </div>
                         </div>
-                        <div class="accordion-body" style="display: none; padding: 15px; border-top: 1px solid var(--border-color, #dee2e6); background: #fdfdfd;">
-                            <div class="accordion-body-inner" style="font-size: 0.9rem; white-space: pre-wrap;">${st.description ? esc(st.description) : '<em class="text-muted">No description provided.</em>'}</div>
+                        <div class="accordion-body" style="display: none; border-top: 1px solid var(--border-color, #dee2e6); background: #fdfdfd;">
+                            <div class="accordion-body-inner" style="padding: 15px; font-size: 0.9rem; white-space: pre-wrap;">${st.description ? esc(st.description) : '<em class="text-muted">No description provided.</em>'}</div>
+                            ${getActionButton(st, true) !== '' ? `<div id="children-${st.key}" style="padding: 0 15px 15px 15px;"></div>` : ''}
                         </div>
                     </div>`;
             });
 
             container.innerHTML = html;
-            btn.textContent = `📎 ${data.subtasks.length} Subtask${data.subtasks.length !== 1 ? 's' : ''}`;
+            let count = data.subtasks.length;
+            btn.innerHTML = `📎 ${count} ${childLabel}`;
             btn.dataset.loaded = 'true';
             btn.disabled = false;
         } catch (err) {
             container.innerHTML = `<div class="alert alert-error" style="margin-top:.5rem;">⚠️ ${err.message}</div>`;
             btn.disabled = false;
-            btn.textContent = '📎 Load Subtasks';
+            btn.innerHTML = originalText;
         }
     }
 
@@ -395,11 +467,17 @@
         const body = header.nextElementSibling;
         const chevron = header.querySelector('.chevron');
         if (header.classList.contains('open')) {
-            body.style.display = 'block';
-            chevron.style.transform = 'rotate(90deg)';
+            if (body) {
+                body.classList.add('open');
+                body.style.display = 'block';
+            }
+            if (chevron) chevron.style.transform = 'rotate(90deg)';
         } else {
-            body.style.display = 'none';
-            chevron.style.transform = 'rotate(0deg)';
+            if (body) {
+                body.classList.remove('open');
+                body.style.display = 'none';
+            }
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
         }
     }
 
@@ -408,6 +486,31 @@
         const div = document.createElement('div');
         div.textContent = typeof str === 'string' ? str : JSON.stringify(str);
         return div.innerHTML;
+    }
+
+    function getIssueIcon(type) {
+        const t = (type || '').toLowerCase();
+        if (t.includes('epic')) return '⚡';
+        if (t.includes('story')) return '📖';
+        if (t.includes('bug')) return '🐛';
+        if (t.includes('task')) return '📋';
+        if (t.includes('sub')) return '🗃️';
+        return '📄';
+    }
+
+    function getActionButton(issue, isAccordion = false) {
+        const t = (issue.issue_type || '').toLowerCase();
+        const eventParam = isAccordion ? ', event' : '';
+        const accData = isAccordion ? 'data-is-accordion="true"' : '';
+        
+        if (t.includes('epic')) {
+            return `<button class="btn btn-outline btn-sm" onclick="loadChildren('${issue.key}', 'Stories', this${eventParam})" ${accData} data-loaded="false">📎 Load Stories</button>`;
+        } else if (t.includes('sub')) {
+            // Subtasks should just be viewed via the accordion description dropdown, no further children
+            return ``;
+        } else {
+            return `<button class="btn btn-outline btn-sm" onclick="loadChildren('${issue.key}', 'Subtasks', this${eventParam})" ${accData} data-loaded="false">📎 Load Subtasks</button>`;
+        }
     }
 </script>
 {% endblock %}

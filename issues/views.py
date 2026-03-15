@@ -40,8 +40,9 @@ def api_load_issues(request, project_key):
     """API endpoint: load issues for a project (called via AJAX)."""
     jira = JiraService()
     next_page_token = request.GET.get('nextPageToken')
+    issue_type = request.GET.get('issue_type')
     try:
-        data = jira.get_issues(project_key, next_page_token)
+        data = jira.get_issues(project_key, next_page_token, issue_type)
         return JsonResponse({
             'success': True, 
             'issues': data['issues'], 
